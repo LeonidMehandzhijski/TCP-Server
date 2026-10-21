@@ -9,3 +9,6 @@ venv/
 # Compiled Python files
 __pycache__/
 *.pyc
+
+# Database
+monitor.db
