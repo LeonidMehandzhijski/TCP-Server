@@ -45,7 +45,6 @@ def check_tcp_echo(host, port):
 
 def check_udp_echo(host, port, count=10, timeout=1.0):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.settimeout(timeout)
     rtts = []
     lost = 0
     error = None
@@ -53,18 +52,29 @@ def check_udp_echo(host, port, count=10, timeout=1.0):
         payload = str(seq).encode()
         start = time.perf_counter()
         sock.sendto(payload, (host, port))
-        try:
-            reply, _ = sock.recvfrom(1024)
+        deadline = start + timeout
+        got = False
+        while True:
+            remaining = deadline - time.perf_counter()
+            if remaining <= 0:
+                error = "timeout"
+                break
+            sock.settimeout(remaining)
+            try:
+                reply, _ = sock.recvfrom(1024)
+            except socket.timeout:
+                error = "timeout"
+                break
+            except ConnectionResetError:
+                error = "port unreachable"
+                break
             if reply == payload:
                 rtts.append((time.perf_counter() - start) * 1000)
-            else:
-                lost += 1
-        except socket.timeout:
+                got = True
+                break
+            # otherwise: a stale reply from an earlier packet; ignore it and keep waiting
+        if not got:
             lost += 1
-            error = "timeout"
-        except ConnectionResetError:
-            lost += 1
-            error = "port unreachable"
         time.sleep(0.2)
     sock.close()
 
